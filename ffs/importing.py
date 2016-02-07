@@ -1,5 +1,6 @@
 from anki.importing.anki2 import Importer
 from anki.utils import splitFields, joinFields
+from anki.lang import ngettext
 
 model_css = """\
 .card {
@@ -18,7 +19,6 @@ model_css = """\
  color: grey;
 }
 """
-# TODO notes aren't added to our deck for some reason
 # TODO some strange shit with field cache stuff
 # TODO what does vacuum and analyze do in SQLite?
 # TODO what does that conf statement before saving the collection do?
@@ -35,6 +35,8 @@ class DirectoryImporter(Importer):
         m = col.models.byName("MyModel")
         if m is None:
             m = col.models.new("MyModel")
+            m["did"] = deck
+            m["css"] = model_css
             fields = {}
             fields["Filename"] = col.models.newField(_("Filename"))
             fields["Front"] = col.models.newField(_("Front"))
@@ -46,8 +48,8 @@ class DirectoryImporter(Importer):
             col.models.addField(m, fields["Source"])
             col.models.setSortIdx(m, m["flds"].index(fields["Filename"]))
             # Set styling and templates for model m
-            m["css"] = model_css
             t = col.models.newTemplate("MyTemplate")
+            t["did"] = deck
             t["qfmt"] = "{{" + _("Front") + "}}"
             t["afmt"] = "{{FrontSide}} <hr id=answer> {{" + _("Back") + "}} <p id='source'>{{" + _("Source") + "}}</p>"
             # Remove old template, set new template
@@ -57,19 +59,20 @@ class DirectoryImporter(Importer):
         # Test note
         f = col.newNote()
         f["Filename"] = u"test.txt"
-        f["Front"] = u"CHANGE SomeHOTHOTHOTHOTHOTHOTHOT AGAIN"
-        f["Back"] = u"ALL OF Differ HOPEFULLY"
-        f["Source"] = u"YET NOTHING  Stuff SHOULD CHANGE IT WILL FUCKING WORK"
+        f["Front"] = u"This is an update question"
+        f["Back"] = u"This is an update answer"
+        f["Source"] = u"This is an update source"
         f2 = col.newNote()
         f2["Filename"] = u"test2.txt"
-        f2["Front"] = u"CHANGE SomeHOTHOTHOTHOTHOTHOTHOT AGAIN"
-        f2["Back"] = u"ALL OF Differ HOPEFULLY"
-        f2["Source"] = u"YET NOTHING  Stuff SHOULD CHANGE IT WILL FUCKING WORK"
+        f2["Front"] = u"This is an update question"
+        f2["Back"] = u"This is an update answer"
+        f2["Source"] = u"This is an update source"
 
         queue = []
         queue.append(f)
         queue.append(f2)
         # Check for updates
+        nids = []
         update = []
         add = []
         for note in col.db.execute("select * from notes"):
@@ -77,13 +80,14 @@ class DirectoryImporter(Importer):
             for n in queue:
                 fields = splitFields(note[6])
                 if n["Filename"] == fields[0]:
-                    flds = [f["Filename"], f["Front"], f["Back"], f["Source"]]
+                    flds = [n["Filename"], n["Front"], n["Back"], n["Source"]]
                     note[6] = joinFields(flds)
                     update.append(note)
                     match = n
             queue.remove(match)
         for note in queue:
             add.append(note)
+            nids.append(note.id)
         if len(update) > 0:
             col.db.executemany(
                 "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
@@ -94,6 +98,15 @@ class DirectoryImporter(Importer):
         for note in add:
             col.addNote(note)
 
+        added_cards = []
+        for card in col.db.execute("select * from cards"):
+            card = list(card)
+            if card[1] in nids:
+                added_cards.append(card[0])
+        cc = len(added_cards)
+        self.log.append(
+            ngettext("%d card imported.", "%d cards imported.", cc) % cc)
+        col.decks.setDeck(added_cards, deck)
         col.conf["nextPos"] = col.db.scalar(
             "select max(due)+1 from cards where type = 0") or 0
         col.save()
