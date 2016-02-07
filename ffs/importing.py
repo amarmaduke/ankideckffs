@@ -19,6 +19,7 @@ model_css = """\
  color: grey;
 }
 """
+# TODO import into empty database gives two duplicates
 # TODO some strange shit with field cache stuff
 # TODO what does vacuum and analyze do in SQLite?
 # TODO what does that conf statement before saving the collection do?
