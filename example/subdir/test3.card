@@ -1,4 +1,0 @@
-{{Front}} latex
-$\sum_{i=0}^n i = ?$
-{{Back}} latex
-$\sum_{i=0}^n i = \frac{n(n+1)}{n}$

@@ -1,6 +1,7 @@
 from anki.importing.anki2 import Importer
 from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
+import os
 
 model_css = """\
 .card {
@@ -19,15 +20,53 @@ model_css = """\
  color: grey;
 }
 """
-# TODO import into empty database gives two duplicates
+# TODO delete notes / cards that don't map to a file
+# TODO map file name and directory name to the actual deck name
+# TODO models from files?
+# TODO macros to use in files?
 # TODO some strange shit with field cache stuff
-# TODO what does vacuum and analyze do in SQLite?
 # TODO what does that conf statement before saving the collection do?
-# TODO get something simple up and working for reading from the fs (finally)
+
+class Parser:
+
+    def parse_note_file(self, path, log):
+        note = {}
+        key = None
+        value = ""
+        with open(path, 'r') as f:
+            for line in f:
+                for word in line.split():
+                    if word[-1:] == ":": # Assumed Keyword
+                        if key:
+                            note[key] = unicode(value.strip(), "utf8")
+                        key = word[:-1]
+                        value = ""
+                    else: # Everything else is dumped into the value
+                        value = value + " " + word
+            note[key] = unicode(value.strip(), "utf8")
+        return note
+
+    def parse_notes(self, path, log):
+        path = path[0:-4]
+        log.append(path + "\n")
+        notes = []
+        for root, dirs, files in os.walk(path):
+            for name in files:
+                file_path = os.path.join(root, name)
+                note = self.parse_note_file(file_path, log)
+                note["Filename"] = name
+                log.append(str(note))
+                notes.append(note)
+        return notes
+
+            # TODO subdirectories
+            #for name in dirs:
+            #    log.append(os.path.join(root, name) + "\n")
 
 class DirectoryImporter(Importer):
 
     def run(self):
+        parser = Parser()
         col = self.col
         # Setup a deck
         deck = col.decks.id("MyDeck")
@@ -57,38 +96,31 @@ class DirectoryImporter(Importer):
             col.models.addTemplate(m, t)
             col.models.add(m)
             col.models.setCurrent(m)
-        # Test note
-        f = col.newNote()
-        f["Filename"] = u"test.txt"
-        f["Front"] = u"This is an update question"
-        f["Back"] = u"This is an update answer"
-        f["Source"] = u"This is an update source"
-        f2 = col.newNote()
-        f2["Filename"] = u"test2.txt"
-        f2["Front"] = u"This is an update question"
-        f2["Back"] = u"This is an update answer"
-        f2["Source"] = u"This is an update source"
 
-        queue = []
-        queue.append(f)
-        queue.append(f2)
+
+        queue = parser.parse_notes(self.file, self.log)
+
         # Check for updates
         nids = []
         update = []
         add = []
         for note in col.db.execute("select * from notes"):
             note = list(note)
+            match = None
             for n in queue:
                 fields = splitFields(note[6])
                 if n["Filename"] == fields[0]:
-                    flds = [n["Filename"], n["Front"], n["Back"], n["Source"]]
-                    note[6] = joinFields(flds)
-                    update.append(note)
+                    if n["Front"] != fields[1]        \
+                            or n["Back"] != fields[2]  \
+                            or n["Source"] != fields[3]:
+                        flds = [n["Filename"], n["Front"], n["Back"], n["Source"]]
+                        note[6] = joinFields(flds)
+                        update.append(note)
                     match = n
-            queue.remove(match)
+            if match:
+                queue.remove(match)
         for note in queue:
             add.append(note)
-            nids.append(note.id)
         if len(update) > 0:
             col.db.executemany(
                 "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
@@ -96,20 +128,28 @@ class DirectoryImporter(Importer):
             #col.updateFieldCache(update) TODO investigate why this breaks
             #col.tags.registerNotes(update)
 
-        for note in add:
+        for textfile in add:
+            note = col.newNote()
+            note["Filename"] = textfile["Filename"]
+            note["Front"] = textfile["Front"]
+            note["Back"] = textfile["Back"]
+            note["Source"] = textfile["Source"]
+            p = "\n" + str(note.id) + " " + str(note.guid) + " " + str(note.mid) + " " + str(note.fields) + " " + str(note.data) + "\n";
+            self.log.append(p);
             col.addNote(note)
+            nids.append(note.id)
 
         added_cards = []
         for card in col.db.execute("select * from cards"):
             card = list(card)
             if card[1] in nids:
                 added_cards.append(card[0])
-        cc = len(added_cards)
+        cc = len(added_cards) + len(update)
         self.log.append(
             ngettext("%d card imported.", "%d cards imported.", cc) % cc)
         col.decks.setDeck(added_cards, deck)
-        col.conf["nextPos"] = col.db.scalar(
-            "select max(due)+1 from cards where type = 0") or 0
+        #col.conf['nextPos'] = self.dst.db.scalar(
+        #    "select max(due)+1 from cards where type = 0") or 0
         col.save()
         col.db.execute("vacuum")
         col.db.execute("analyze")
