@@ -20,7 +20,8 @@ model_css = """\
  color: grey;
 }
 """
-# TODO map file name and directory name to the actual deck name
+
+# TODO clean up empty child databases
 # TODO models from files?
 # TODO macros to use in files?
 # TODO what does that conf statement before saving the collection do?
@@ -57,17 +58,30 @@ class Parser:
             note[key] = unicode(value.strip(), "utf8")
         return note
 
+    def get_relative_path(self, path, from_folder, log):
+        folders = self.split_path(path)
+        result = from_folder
+        insert = False
+        for folder in folders[:-1]: #ignore the filename
+            if insert:
+                result = result + "/" + folder
+            if folder == from_folder:
+                insert = True
+        return result
+
     def parse_notes(self, path, log):
         path = path[0:-4]
         path_name = self.split_path(path)[-1]
         log.append(path + "\n")
         notes = []
         for root, dirs, files in os.walk(path):
+            log.append(root + " " + str(dirs) + " " + str(files))
             for name in files:
                 file_path = os.path.join(root, name)
+                relative_path = self.get_relative_path(file_path, path_name, log)
                 note = self.parse_note_file(file_path, log)
-                note["Filename"] = path_name + "/" + name
-                log.append(str(note))
+                note["Filename"] = relative_path + "/" + name
+                note["Deckname"] = relative_path.replace("/", "::")
                 notes.append(note)
         return notes, path_name
 
@@ -89,8 +103,8 @@ class DirectoryImporter(Importer):
         m = col.models.byName("MyModel")
         if m is None:
             m = col.models.new("MyModel")
-            m["did"] = deck
             m["css"] = model_css
+            m["did"] = deck
             fields = {}
             fields["Filename"] = col.models.newField(_("Filename"))
             fields["Front"] = col.models.newField(_("Front"))
@@ -113,6 +127,7 @@ class DirectoryImporter(Importer):
 
         # Check for updates
         nids = []
+        nids_decks = {}
         update = []
         add = []
         delete = []
@@ -123,7 +138,6 @@ class DirectoryImporter(Importer):
             fields = splitFields(note[6])
             deck_check = fields[0].split('/')[0]
             tags = col.tags.split(note[5])
-            self.log.append(str(tags) + " " + deck_name + " " + deck_check)
             if col.tags.inList("ankideckffs:deletable", tags) \
                     and deck_name == deck_check:
                 deletable = True
@@ -155,17 +169,18 @@ class DirectoryImporter(Importer):
             note = col.newNote()
             note.addTag("ankideckffs:deletable")
             note["Filename"] = textfile["Filename"]
-            note["Front"] = textfile["Front"]
-            note["Back"] = textfile["Back"]
-            note["Source"] = textfile["Source"]
+            note["Front"] = textfile["Front"] or "<empty>"
+            note["Back"] = textfile["Back"] or "<empty>"
+            note["Source"] = textfile["Source"] or "<empty>"
             col.addNote(note)
             nids.append(note.id)
+            nids_decks[note.id] = textfile["Deckname"]
 
         added_cards = []
         for card in col.db.execute("select * from cards"):
             card = list(card)
             if card[1] in nids:
-                added_cards.append(card[0])
+                added_cards.append(card)
         cc = len(added_cards) + len(update)
         cd = len(delete)
         self.log.append(
@@ -173,7 +188,11 @@ class DirectoryImporter(Importer):
                 "{0} card changed and {1} deleted.",
                 "{0} cards changed and {1} deleted.",
                 cc).format(cc, cd))
-        col.decks.setDeck(added_cards, deck)
+        # TODO improve this loop
+        for card in added_cards:
+            deck_name = nids_decks[card[1]]
+            deck = col.decks.id(deck_name)
+            col.decks.setDeck([card[0]], deck)
         #col.conf['nextPos'] = self.dst.db.scalar(
         #    "select max(due)+1 from cards where type = 0") or 0
         col.save()
