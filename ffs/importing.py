@@ -21,6 +21,9 @@ model_css = """\
 }
 """
 
+# TODO fix up macros
+# TODO improve parsing of files
+# TODO split stuff off and refactor
 # TODO clean up empty child databases
 # TODO models from files?
 # TODO macros to use in files?
@@ -41,22 +44,36 @@ class Parser:
         folders.reverse()
         return folders
 
-    def parse_note_file(self, path, log):
-        note = {}
+    def macro_match(self, str):
+        front = str[:2]
+        back = str[-2:]
+        result = str[-2:2]
+        if front == "{{" and back == "}}":
+            return result
+        return None
+
+    def parse_file(self, path, macros = None, log = None):
+        text = {}
         key = None
         value = ""
-        with open(path, 'r') as f:
-            for line in f:
-                for word in line.split():
-                    if word[-1:] == ":": # Assumed Keyword
-                        if key:
-                            note[key] = unicode(value.strip(), "utf8")
-                        key = word[:-1]
-                        value = ""
-                    else: # Everything else is dumped into the value
-                        value = value + " " + word
-            note[key] = unicode(value.strip(), "utf8")
-        return note
+        try:
+            with open(path, 'r') as f:
+                for line in f:
+                    for word in line.split():
+                        if word[-1:] == ":": # Assumed Keyword
+                            if key:
+                                text[key] = unicode(value.strip(), "utf8")
+                            key = word[:-1]
+                            value = ""
+                        else: # Everything else is dumped into the value
+                            word_update = self.macro_match(word)
+                            if word_update:
+                                word = word_update
+                            value = value + " " + word
+                text[key] = unicode(value.strip(), "utf8")
+        except Exception as error:
+            pass
+        return text
 
     def get_relative_path(self, path, from_folder, log):
         folders = self.split_path(path)
@@ -76,18 +93,20 @@ class Parser:
         notes = []
         for root, dirs, files in os.walk(path):
             log.append(root + " " + str(dirs) + " " + str(files))
+            macros_file = os.path.join(root, "macros")
+            macros = self.parse_file(macros_file)
+
             for name in files:
+                if name == "macros":
+                    continue
                 file_path = os.path.join(root, name)
                 relative_path = self.get_relative_path(file_path, path_name, log)
-                note = self.parse_note_file(file_path, log)
+                note = {}
+                note = self.parse_file(file_path, macros, log)
                 note["Filename"] = relative_path + "/" + name
                 note["Deckname"] = relative_path.replace("/", "::")
                 notes.append(note)
         return notes, path_name
-
-            # TODO subdirectories
-            #for name in dirs:
-            #    log.append(os.path.join(root, name) + "\n")
 
 class DirectoryImporter(Importer):
 
@@ -169,9 +188,9 @@ class DirectoryImporter(Importer):
             note = col.newNote()
             note.addTag("ankideckffs:deletable")
             note["Filename"] = textfile["Filename"]
-            note["Front"] = textfile["Front"] or "<empty>"
-            note["Back"] = textfile["Back"] or "<empty>"
-            note["Source"] = textfile["Source"] or "<empty>"
+            note["Front"] = textfile["Front"]
+            note["Back"] = textfile["Back"]
+            note["Source"] = textfile["Source"]
             col.addNote(note)
             nids.append(note.id)
             nids_decks[note.id] = textfile["Deckname"]
