@@ -20,14 +20,25 @@ model_css = """\
  color: grey;
 }
 """
-# TODO delete notes / cards that don't map to a file
 # TODO map file name and directory name to the actual deck name
 # TODO models from files?
 # TODO macros to use in files?
-# TODO some strange shit with field cache stuff
 # TODO what does that conf statement before saving the collection do?
 
 class Parser:
+
+    def split_path(self, path):
+        folders = []
+        while True:
+            path, folder = os.path.split(path)
+            if folder != "":
+                folders.append(folder)
+            else:
+                if path != "":
+                    folders.append(path)
+                break
+        folders.reverse()
+        return folders
 
     def parse_note_file(self, path, log):
         note = {}
@@ -48,16 +59,17 @@ class Parser:
 
     def parse_notes(self, path, log):
         path = path[0:-4]
+        path_name = self.split_path(path)[-1]
         log.append(path + "\n")
         notes = []
         for root, dirs, files in os.walk(path):
             for name in files:
                 file_path = os.path.join(root, name)
                 note = self.parse_note_file(file_path, log)
-                note["Filename"] = name
+                note["Filename"] = path_name + "/" + name
                 log.append(str(note))
                 notes.append(note)
-        return notes
+        return notes, path_name
 
             # TODO subdirectories
             #for name in dirs:
@@ -67,9 +79,11 @@ class DirectoryImporter(Importer):
 
     def run(self):
         parser = Parser()
+        queue, deck_name = parser.parse_notes(self.file, self.log)
+
         col = self.col
         # Setup a deck
-        deck = col.decks.id("MyDeck")
+        deck = col.decks.id(deck_name)
         col.decks.select(deck)
         # Make a new model
         m = col.models.byName("MyModel")
@@ -97,45 +111,53 @@ class DirectoryImporter(Importer):
             col.models.add(m)
             col.models.setCurrent(m)
 
-
-        queue = parser.parse_notes(self.file, self.log)
-
         # Check for updates
         nids = []
         update = []
         add = []
+        delete = []
         for note in col.db.execute("select * from notes"):
             note = list(note)
             match = None
+            deletable = False
+            fields = splitFields(note[6])
+            deck_check = fields[0].split('/')[0]
+            tags = col.tags.split(note[5])
+            self.log.append(str(tags) + " " + deck_name + " " + deck_check)
+            if col.tags.inList("ankideckffs:deletable", tags) \
+                    and deck_name == deck_check:
+                deletable = True
             for n in queue:
-                fields = splitFields(note[6])
                 if n["Filename"] == fields[0]:
-                    if n["Front"] != fields[1]        \
-                            or n["Back"] != fields[2]  \
+                    if n["Front"] != fields[1]       \
+                            or n["Back"] != fields[2] \
                             or n["Source"] != fields[3]:
-                        flds = [n["Filename"], n["Front"], n["Back"], n["Source"]]
+                        flds = [n["Filename"],n["Front"], n["Back"], n["Source"]]
                         note[6] = joinFields(flds)
                         update.append(note)
                     match = n
             if match:
                 queue.remove(match)
+            elif deletable:
+                delete.append(note[0])
+
         for note in queue:
             add.append(note)
-        if len(update) > 0:
-            col.db.executemany(
-                "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
-                update)
-            #col.updateFieldCache(update) TODO investigate why this breaks
-            #col.tags.registerNotes(update)
+
+        col.remNotes(delete)
+        col.db.executemany(
+            "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
+            update)
+        col.updateFieldCache(update)
+        col.tags.registerNotes(update)
 
         for textfile in add:
             note = col.newNote()
+            note.addTag("ankideckffs:deletable")
             note["Filename"] = textfile["Filename"]
             note["Front"] = textfile["Front"]
             note["Back"] = textfile["Back"]
             note["Source"] = textfile["Source"]
-            p = "\n" + str(note.id) + " " + str(note.guid) + " " + str(note.mid) + " " + str(note.fields) + " " + str(note.data) + "\n";
-            self.log.append(p);
             col.addNote(note)
             nids.append(note.id)
 
@@ -145,8 +167,12 @@ class DirectoryImporter(Importer):
             if card[1] in nids:
                 added_cards.append(card[0])
         cc = len(added_cards) + len(update)
+        cd = len(delete)
         self.log.append(
-            ngettext("%d card imported.", "%d cards imported.", cc) % cc)
+            ngettext(
+                "{0} card changed and {1} deleted.",
+                "{0} cards changed and {1} deleted.",
+                cc).format(cc, cd))
         col.decks.setDeck(added_cards, deck)
         #col.conf['nextPos'] = self.dst.db.scalar(
         #    "select max(due)+1 from cards where type = 0") or 0
