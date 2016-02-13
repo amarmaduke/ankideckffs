@@ -1,7 +1,6 @@
 from anki.importing.anki2 import Importer
 from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
-import os
 
 model_css = """\
 .card {
@@ -21,92 +20,11 @@ model_css = """\
 }
 """
 
-# TODO fix up macros
 # TODO improve parsing of files
 # TODO split stuff off and refactor
 # TODO clean up empty child databases
 # TODO models from files?
-# TODO macros to use in files?
 # TODO what does that conf statement before saving the collection do?
-
-class Parser:
-
-    def split_path(self, path):
-        folders = []
-        while True:
-            path, folder = os.path.split(path)
-            if folder != "":
-                folders.append(folder)
-            else:
-                if path != "":
-                    folders.append(path)
-                break
-        folders.reverse()
-        return folders
-
-    def macro_match(self, str):
-        front = str[:2]
-        back = str[-2:]
-        result = str[-2:2]
-        if front == "{{" and back == "}}":
-            return result
-        return None
-
-    def parse_file(self, path, macros = None, log = None):
-        text = {}
-        key = None
-        value = ""
-        try:
-            with open(path, 'r') as f:
-                for line in f:
-                    for word in line.split():
-                        if word[-1:] == ":": # Assumed Keyword
-                            if key:
-                                text[key] = unicode(value.strip(), "utf8")
-                            key = word[:-1]
-                            value = ""
-                        else: # Everything else is dumped into the value
-                            word_update = self.macro_match(word)
-                            if word_update:
-                                word = word_update
-                            value = value + " " + word
-                text[key] = unicode(value.strip(), "utf8")
-        except Exception as error:
-            pass
-        return text
-
-    def get_relative_path(self, path, from_folder, log):
-        folders = self.split_path(path)
-        result = from_folder
-        insert = False
-        for folder in folders[:-1]: #ignore the filename
-            if insert:
-                result = result + "/" + folder
-            if folder == from_folder:
-                insert = True
-        return result
-
-    def parse_notes(self, path, log):
-        path = path[0:-4]
-        path_name = self.split_path(path)[-1]
-        log.append(path + "\n")
-        notes = []
-        for root, dirs, files in os.walk(path):
-            log.append(root + " " + str(dirs) + " " + str(files))
-            macros_file = os.path.join(root, "macros")
-            macros = self.parse_file(macros_file)
-
-            for name in files:
-                if name == "macros":
-                    continue
-                file_path = os.path.join(root, name)
-                relative_path = self.get_relative_path(file_path, path_name, log)
-                note = {}
-                note = self.parse_file(file_path, macros, log)
-                note["Filename"] = relative_path + "/" + name
-                note["Deckname"] = relative_path.replace("/", "::")
-                notes.append(note)
-        return notes, path_name
 
 class DirectoryImporter(Importer):
 
