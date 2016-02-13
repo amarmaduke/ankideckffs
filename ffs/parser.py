@@ -20,14 +20,16 @@ def lex_file(path):
         with open(path, 'r') as f:
             for line in f:
                 for char in line:
-                    if text.strip() == "[[": # key start
+                    if text[-2:] == "[[": # key start
+                        stream.append(text[:-2])
                         stream.append("[[")
                         text = ""
                     elif text[-2:] == "]]": # key end
                         stream.append(text[:-2])
                         stream.append("]]")
                         text = ""
-                    elif text.strip() == "{{": # left macro expansion
+                    elif text[-2:] == "{{": # left macro expansion
+                        stream.append(text[:-2])
                         stream.append("{{")
                         text = ""
                     elif text[-2:] == "}}": # right macro expansion
@@ -35,13 +37,14 @@ def lex_file(path):
                         stream.append("}}")
                         text = ""
                     text = text + char
+        stream.append(text)
     except Exception as error:
         pass
     return stream
 
 class Tree:
     def __init__(self, path):
-        inital_name = split_path(path)[-1]
+        initial_name = split_path(path)[-1]
         self.macros = {}
         self.options = {}
         self.children = []
@@ -58,77 +61,125 @@ class Tree:
                 self.children.append(tree)
             else:
                 if name == "macros":
-                    self.macros = parse_file(next_path)
-                else if name == "options":
-                    self.options = parse_file(next_path)
+                    self.macros = self.parse_file(next_path)
+                elif name == "options":
+                    self.options = self.parse_file(next_path)
                 else:
                     self.file_paths.append(next_path)
 
     def get_full_name(self):
         result = []
         full_name = ""
+        prefix_name = ""
         tree = self
         while tree.parent:
             result.append(tree.name)
             tree = tree.parent
-        for name in reversed(result)
-            full_name = name + "/"
-        return full_name
+        result.append(tree.name)
+        for name in reversed(result):
+            full_name = full_name + name + "::"
+        for name in reversed(result[:-1]):
+            prefix_name = prefix_name + name + "/"
+
+        return full_name[:-2], prefix_name
 
     def expand_macro(self, name):
         result = None
         tree = self
-        while (tree.parent and not result)
+        while tree.parent and not result:
             if name in tree.macros:
                 result = tree.macros[name]
             tree = tree.parent
         return result
 
+    def fix_expanded_stream(self, stream):
+        result = []
+        text = ""
+        for token in stream:
+            if token == "[[":
+                result.append(text)
+                text = ""
+                result.append("[[")
+            elif token == "]]":
+                result.append(text)
+                text = ""
+                result.append("]]")
+            else:
+                text = text + token
+        result.append(text)
+        return result
+
     def parse_file(self, path):
         stream = lex_file(path)
+        if len(stream) == 0:
+            raise ValueError("Lexer error, are you doing \
+                `[[key]] value {\{macro\}} value` ? file: {0}".format(path))
         estream = []
         ignore = []
         text = {}
 
         for i in range(len(stream)):
             if stream[i] == "{{":
-                if stream[i + 1] == "{{":
-                    raise Error("Can't have nested macros")
+                if i + 1 >= len(stream):
+                    raise ValueError( \
+                        "Expected macro name after {{, file: {0}".format(path))
+                elif stream[i + 1] == "{{":
+                    raise ValueError( \
+                        "Can't have nested macros, file: {0}".format(path))
                 elif stream[i + 1] == "}}":
-                    raise Error("Macro name must be nonempty")
-                if stream[i + 2] != "}}":
-                    raise Error("Expected closing }}")
-                value = expand_macro(stream[i + 1].strip())
+                    raise ValueError( \
+                        "Macro name must be nonempty, file: {0}".format(path))
+                if i + 2 >= len(stream) or stream[i + 2] != "}}":
+                    raise ValueError( \
+                        "Expected closing }}, file: {0}".format(path))
+                value = self.expand_macro(stream[i + 1].strip())
                 if value:
                     estream.append(value)
                     ignore.append(i + 1)
                 else:
-                    raise Error("Macro name does not exist")
+                    raise ValueError( \
+                        "Macro name does not exist, file: {0}".format(path))
             elif stream[i] != "}}" and i not in ignore:
                 estream.append(stream[i])
+        estream = self.fix_expanded_stream(estream)
 
-        for i in range(len(stream)):
-            if stream[i] == "[[":
-                if stream[i + 1] == "[[":
-                    raise Error("Can't have nested key declarations")
-                elif stream[i + 1] == "]]":
-                    raise Error("Key name must be nonempty")
-                if stream[i + 2] != "]]":
-                    raise Error("Expected closing ]]")
-                if stream[i + 3] == "[[" or stream[i + 3] == "]]":
-                    raise Error("Expected field value after key declaration")
-                text[stream[i + 1].strip()] = \
-                    unicode(stream[i + 3].strip(), "utf8")
+        if len(estream) > 5:
+            raise ValueError(str(stream) + "\n\n" + str(estream))
+
+        for i in range(len(estream)):
+            if estream[i] == "[[":
+                if i + 1 >= len(estream):
+                    raise ValueError( \
+                        "Expected key name after [[, file: {0}".format(path))
+                elif estream[i + 1] == "[[":
+                    raise ValueError( \
+                        "Can't have nested key declarations, \
+                         file: {0}".format(path))
+                elif estream[i + 1] == "]]":
+                    raise ValueError( \
+                        "Key name must be nonempty, file: {0}".format(path))
+                if i + 2 >= len(estream) or estream[i + 2] != "]]":
+                    raise ValueError( \
+                        "Expected closing ]], file: {0}".format(path))
+                if i + 3 >= len(estream) or \
+                    estream[i + 3] == "[[" or estream[i + 3] == "]]":
+                    raise ValueError(
+                        "Expected field value after key declaration, \
+                        file: {0}".format(path))
+                text[estream[i + 1].strip()] = \
+                    unicode(estream[i + 3].strip(), "utf8")
+        if not text:
+            raise ValueError("Unexpected parser error, file: {0}".format(path))
         return text
 
     def parse(self):
         for path in self.file_paths:
             f = self.parse_file(path)
-            full_name = self.get_full_name()
-            f["Filename"] = full_name + split_path(path)[-1]
-            f["Deckname"] = full_name.replace("/", "::")[:-2]
+            full_name, prefix_name = self.get_full_name()
+            f["Filename"] = prefix_name + split_path(path)[-1]
+            f["Deckname"] = full_name
             self.files.append(f)
         for child in self.children:
             f = child.parse()
-            self.files.append(f)
+            self.files.extend(f)
         return self.files

@@ -1,6 +1,7 @@
 from anki.importing.anki2 import Importer
 from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
+from parser import Tree
 
 model_css = """\
 .card {
@@ -20,8 +21,7 @@ model_css = """\
 }
 """
 
-# TODO improve parsing of files
-# TODO split stuff off and refactor
+# TODO macros are broken again, take a look
 # TODO clean up empty child databases
 # TODO models from files?
 # TODO what does that conf statement before saving the collection do?
@@ -29,8 +29,13 @@ model_css = """\
 class DirectoryImporter(Importer):
 
     def run(self):
-        parser = Parser()
-        queue, deck_name = parser.parse_notes(self.file, self.log)
+
+        tree = Tree(self.file[:-4])
+        queue = tree.parse()
+        self.log.append(str(queue))
+        self.log.append("rip")
+        return
+        deck_name = tree.name
 
         col = self.col
         # Setup a deck

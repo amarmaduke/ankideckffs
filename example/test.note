@@ -1,8 +1,11 @@
-Front:
+[[Front]]
+
+whoops
 
 [latex]
    $\sum_{i=0}^n i = \frac{n(n+1)}{2}$
 [/latex]
 
-Back: This is the back {{joke}}
-Source: Me Also
+[[Back]] $$ \int_a^b e^x dx $$ {{joke}}
+
+[[Source]] Me Also
