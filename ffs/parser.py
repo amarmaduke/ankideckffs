@@ -13,65 +13,41 @@ def split_path(path):
     folders.reverse()
     return folders
 
-def parse_file(path, macros = None):
-    text = {}
-    key = None
-    value = ""
+def lex_file(path):
+    stream = []
     try:
+        text = ""
         with open(path, 'r') as f:
             for line in f:
-                for word in line.split():
-                    if word[-1:] == ":": # Assumed Keyword
-                        if key:
-                            text[key] = unicode(value.strip(), "utf8")
-                        key = word[:-1]
-                        value = ""
-                    else: # Everything else is dumped into the value
-                        word_update = self.macro_match(word, log)
-                        if word_update:
-                            value = value + " " + word_update
-                        else:
-                            value = value + " " + word
-            text[key] = unicode(value.strip(), "utf8")
+                for char in line:
+                    if text.strip() == "[[": # key start
+                        stream.append("[[")
+                        text = ""
+                    elif text[-2:] == "]]": # key end
+                        stream.append(text[:-2])
+                        stream.append("]]")
+                        text = ""
+                    elif text.strip() == "{{": # left macro expansion
+                        stream.append("{{")
+                        text = ""
+                    elif text[-2:] == "}}": # right macro expansion
+                        stream.append(text[:-2])
+                        stream.append("}}")
+                        text = ""
+                    text = text + char
     except Exception as error:
         pass
-    return text
-
-    def parse_notes(self, path, log):
-        path = path[0:-4]
-        path_name = self.split_path(path)[-1]
-        # log.append(path + "\n")
-        notes = []
-        for root, dirs, files in os.walk(path):
-            # log.append(root + " " + str(dirs) + " " + str(files))
-            macros_file = os.path.join(root, "macros")
-            macros = self.parse_file(macros_file)
-
-            for name in files:
-                if name == "macros":
-                    continue
-                file_path = os.path.join(root, name)
-                relative_path = self.get_relative_path(file_path, path_name, log)
-                note = {}
-                note = self.parse_file(file_path, macros, log)
-                note["Filename"] = relative_path + "/" + name
-                note["Deckname"] = relative_path.replace("/", "::")
-                log.append(str(note))
-                notes.append(note)
-        return notes, path_name
+    return stream
 
 class Tree:
-    def __init__(self, name):
+    def __init__(self, path):
+        inital_name = split_path(path)[-1]
         self.macros = {}
         self.options = {}
         self.children = []
         self.parent = None
         self.file_paths = []
         self.files = []
-        self.name = name
-
-    def __init__(self, path):
-        inital_name = split_path(path)[-1]
         self.name = initial_name
 
         for name in os.listdir(path):
@@ -88,50 +64,71 @@ class Tree:
                 else:
                     self.file_paths.append(next_path)
 
-        for f in self.file_paths:
-            text = parse_file(f, self.macros)
-            self.files.append(text)
+    def get_full_name(self):
+        result = []
+        full_name = ""
+        tree = self
+        while tree.parent:
+            result.append(tree.name)
+            tree = tree.parent
+        for name in reversed(result)
+            full_name = name + "/"
+        return full_name
 
-class Parser:
-
-    def macro_match(self, str, log):
-        front = str[:2]
-        back = str[-2:]
-        result = str[2:-2]
-        if front == "{{" and back == "}}":
-            return result
-        return None
-
-    def get_relative_path(self, path, from_folder, log):
-        folders = self.split_path(path)
-        result = from_folder
-        insert = False
-        for folder in folders[:-1]: #ignore the filename
-            if insert:
-                result = result + "/" + folder
-            if folder == from_folder:
-                insert = True
+    def expand_macro(self, name):
+        result = None
+        tree = self
+        while (tree.parent and not result)
+            if name in tree.macros:
+                result = tree.macros[name]
+            tree = tree.parent
         return result
 
-    def parse_notes(self, path, log):
-        path = path[0:-4]
-        path_name = self.split_path(path)[-1]
-        # log.append(path + "\n")
-        notes = []
-        for root, dirs, files in os.walk(path):
-            # log.append(root + " " + str(dirs) + " " + str(files))
-            macros_file = os.path.join(root, "macros")
-            macros = self.parse_file(macros_file)
+    def parse_file(self, path):
+        stream = lex_file(path)
+        estream = []
+        ignore = []
+        text = {}
 
-            for name in files:
-                if name == "macros":
-                    continue
-                file_path = os.path.join(root, name)
-                relative_path = self.get_relative_path(file_path, path_name, log)
-                note = {}
-                note = self.parse_file(file_path, macros, log)
-                note["Filename"] = relative_path + "/" + name
-                note["Deckname"] = relative_path.replace("/", "::")
-                log.append(str(note))
-                notes.append(note)
-        return notes, path_name
+        for i in range(len(stream)):
+            if stream[i] == "{{":
+                if stream[i + 1] == "{{":
+                    raise Error("Can't have nested macros")
+                elif stream[i + 1] == "}}":
+                    raise Error("Macro name must be nonempty")
+                if stream[i + 2] != "}}":
+                    raise Error("Expected closing }}")
+                value = expand_macro(stream[i + 1].strip())
+                if value:
+                    estream.append(value)
+                    ignore.append(i + 1)
+                else:
+                    raise Error("Macro name does not exist")
+            elif stream[i] != "}}" and i not in ignore:
+                estream.append(stream[i])
+
+        for i in range(len(stream)):
+            if stream[i] == "[[":
+                if stream[i + 1] == "[[":
+                    raise Error("Can't have nested key declarations")
+                elif stream[i + 1] == "]]":
+                    raise Error("Key name must be nonempty")
+                if stream[i + 2] != "]]":
+                    raise Error("Expected closing ]]")
+                if stream[i + 3] == "[[" or stream[i + 3] == "]]":
+                    raise Error("Expected field value after key declaration")
+                text[stream[i + 1].strip()] = \
+                    unicode(stream[i + 3].strip(), "utf8")
+        return text
+
+    def parse(self):
+        for path in self.file_paths:
+            f = self.parse_file(path)
+            full_name = self.get_full_name()
+            f["Filename"] = full_name + split_path(path)[-1]
+            f["Deckname"] = full_name.replace("/", "::")[:-2]
+            self.files.append(f)
+        for child in self.children:
+            f = child.parse()
+            self.files.append(f)
+        return self.files
