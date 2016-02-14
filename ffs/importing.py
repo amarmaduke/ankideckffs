@@ -4,6 +4,7 @@ from anki.lang import ngettext
 from parser import Tree
 
 
+# TODO what happens if a model is changed out from under a card?
 # TODO what does that conf statement before saving the collection do?
 # TODO set added and updated tags for easier previewing
 # TODO options file
