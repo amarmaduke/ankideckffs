@@ -1,0 +1,32 @@
+[[name]]
+MyOtherModel
+
+[[css]]
+.card {
+  font-family: arial;
+  font-size: 20px;
+  text-align: center;
+  color: black;
+  background-color: white;
+}
+
+#source {
+  font-size: 12px;
+  position: relative;
+  margin-top: 50px;
+  margin-left: 300px;
+  color: grey;
+}
+
+[[fields]]
+Front Back Source
+
+[[templates]]
+MyMemeplete
+
+[[MyMemeplete qfmt]]
+\{{Front\}}
+
+[[MyMemeplete afmt]]
+\{{FrontSide\}} <hr id=answer> \{{Back\}} <p id='source'>\{{Source\}}</p>
+

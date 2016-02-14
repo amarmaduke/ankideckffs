@@ -3,28 +3,11 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
-model_css = """\
-.card {
- font-family: arial;
- font-size: 20px;
- text-align: center;
- color: black;
- background-color: white;
-}
 
-#source {
- font-size: 12px;
- position: relative;
- margin-top: 50px;
- margin-left: 300px;
- color: grey;
-}
-"""
-
-# TODO models from files?
 # TODO what does that conf statement before saving the collection do?
 # TODO set added and updated tags for easier previewing
 # TODO options file
+# TODO cleanup unused tags or models
 
 class DirectoryImporter(Importer):
 
@@ -38,32 +21,48 @@ class DirectoryImporter(Importer):
         # Setup a deck
         deck = col.decks.id(deck_name)
         col.decks.select(deck)
-        # Make a new model
-        m = col.models.byName("MyModel")
-        if m is None:
-            m = col.models.new("MyModel")
-            m["css"] = model_css
-            m["did"] = deck
-            fields = {}
-            fields["Filename"] = col.models.newField(_("Filename"))
-            fields["Front"] = col.models.newField(_("Front"))
-            fields["Back"] = col.models.newField(_("Back"))
-            fields["Source"] = col.models.newField(_("Source"))
-            col.models.addField(m, fields["Filename"])
-            col.models.addField(m, fields["Front"])
-            col.models.addField(m, fields["Back"])
-            col.models.addField(m, fields["Source"])
-            col.models.setSortIdx(m, m["flds"].index(fields["Filename"]))
-            # Set styling and templates for model m
-            t = col.models.newTemplate("MyTemplate")
-            t["did"] = deck
-            t["qfmt"] = "{{" + _("Front") + "}}"
-            t["afmt"] = "{{FrontSide}} <hr id=answer> {{" + _("Back") + "}} <p id='source'>{{" + _("Source") + "}}</p>"
-            # Remove old template, set new template
-            col.models.addTemplate(m, t)
-            col.models.add(m)
-            col.models.setCurrent(m)
 
+        # Make models
+        for note in queue:
+            tmp = note["ffsModel"]
+            m = col.models.byName(tmp["name"])
+            if m is None:
+                m = col.models.new(tmp["name"])
+                self.log.append(str(tmp) + '\n')
+                if "latexPre" in tmp:
+                    m["latexPre"] = tmp["latexPre"]
+                if "latexPost" in tmp:
+                    m["latexPost"] = tmp["latexPost"]
+                if "css" in tmp:
+                    m["css"] = tmp["css"]
+                if "templates" in tmp:
+                    templates = tmp["templates"].split()
+                    for name in templates:
+                        t = col.models.newTemplate(name)
+                        if name+" qfmt" in tmp:
+                            t["qfmt"] = tmp[name+" qfmt"]
+                        if name+" afmt" in tmp:
+                            t["afmt"] = tmp[name+" afmt"]
+                        if name+" bqfmt" in tmp:
+                            t["bqfmt"] = tmp[name+" bqfmt"]
+                        if name+" bafmt" in tmp:
+                            t["bafmt"] = tmp[name+" bafmt"]
+                        col.models.addTemplate(m, t)
+                if "fields" in tmp:
+                    fields = tmp["fields"].split()
+                    for name in fields:
+                        field = col.models.newField(name)
+                        col.models.addField(m, field)
+                field = col.models.newField("Filename")
+                col.models.addField(m, field)
+                self.log.append(str(m) + '\n')
+                self.log.append("rip\n")
+                col.models.add(m)
+            # Sanity check our note
+            for field in col.models.fieldNames(m):
+                if field not in note:
+                    raise ValueError("Note missing model field, \
+                        in file: {0}".format(note["Filename"]))
         # Check for updates
         nids = []
         nids_decks = {}
@@ -74,18 +73,34 @@ class DirectoryImporter(Importer):
             note = list(note)
             match = None
             deletable = False
-            fields = splitFields(note[6])
-            deck_check = fields[0].split('/')[0]
+            m = col.models.get(note[2])
             tags = col.tags.split(note[5])
+            field_map = col.models.fieldMap(m)
+            fields = splitFields(note[6])
+            if "Filename" not in field_map:
+                if col.tags.inList("ankideckffs:deletable", tags):
+                    raise ValueError("ffs owned note tampered with.")
+                continue
+            filename = fields[field_map["Filename"][0]]
+
+            deck_check = filename.split('/')[0]
             if col.tags.inList("ankideckffs:deletable", tags) \
                     and deck_name == deck_check:
                 deletable = True
             for n in queue:
-                if n["Filename"] == fields[0]:
-                    if n["Front"] != fields[1]       \
-                            or n["Back"] != fields[2] \
-                            or n["Source"] != fields[3]:
-                        flds = [n["Filename"],n["Front"], n["Back"], n["Source"]]
+                om = col.models.byName(n["ffsModel"]["name"])
+                if n["Filename"] == filename:
+                    if m != om:
+                        raise ValueError("ffs owned note tampered with")
+                    changed = False
+                    for field in field_map:
+                        if fields[field[0]] != n[field]:
+                            changed = True
+                            break
+                    if changed:
+                        flds = []
+                        for field in field_map:
+                            flds.append(n[field])
                         note[6] = joinFields(flds)
                         update.append(note)
                     match = n
@@ -105,15 +120,16 @@ class DirectoryImporter(Importer):
         col.tags.registerNotes(update)
 
         for textfile in add:
+            m = col.models.byName(textfile["ffsModel"]["name"])
+            col.models.setCurrent(m)
             note = col.newNote()
             note.addTag("ankideckffs:deletable")
-            note["Filename"] = textfile["Filename"]
-            note["Front"] = textfile["Front"]
-            note["Back"] = textfile["Back"]
-            note["Source"] = textfile["Source"]
+            fields = col.models.fieldNames(m)
+            for field in fields:
+                note[field] = textfile[field]
             col.addNote(note)
             nids.append(note.id)
-            nids_decks[note.id] = textfile["Deckname"]
+            nids_decks[note.id] = textfile["ffsDeckname"]
 
         added_cards = []
         for card in col.db.execute("select * from cards"):
@@ -132,6 +148,11 @@ class DirectoryImporter(Importer):
             deck_name = nids_decks[card[1]]
             deck = col.decks.id(deck_name)
             col.decks.setDeck([card[0]], deck)
+
+        # Set the default model to something standard
+        basic = col.models.byName("Basic")
+        if basic:
+            col.models.setCurrent(basic)
 
         # Cleanup empty decks
         children_decks = col.decks.children(deck)

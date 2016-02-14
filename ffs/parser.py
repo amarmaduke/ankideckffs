@@ -20,7 +20,15 @@ def lex_file(path):
         with open(path, 'r') as f:
             for line in f:
                 for char in line:
-                    if text[-2:] == "[[": # key start
+                    if text[-3:] == "\[[":
+                        text = text.replace("\[[", "[[")
+                    elif text[-3:] == "\]]":
+                        text = text.replace("\]]", "]]")
+                    elif text[-3:] == "\{{":
+                        text = text.replace("\{{", "{{")
+                    elif text[-3:] == "\}}":
+                        text = text.replace("\}}", "}}")
+                    elif text[-2:] == "[[": # key start
                         stream.append(text[:-2])
                         stream.append("[[")
                         text = ""
@@ -38,7 +46,7 @@ def lex_file(path):
                         text = ""
                     text = text + char
         stream.append(text)
-    except Exception as error:
+    except IOError as error:
         pass
     return stream
 
@@ -47,6 +55,7 @@ class Tree:
         initial_name = split_path(path)[-1]
         self.macros = {}
         self.options = {}
+        self.model = {}
         self.children = []
         self.parent = None
         self.file_paths = []
@@ -61,9 +70,13 @@ class Tree:
                 self.children.append(tree)
             else:
                 if name == "macros":
-                    self.macros = self.parse_file(next_path)
+                    self.macros = self.parse_file(next_path, False)
                 elif name == "options":
-                    self.options = self.parse_file(next_path)
+                    self.options = self.parse_file(next_path, False)
+                elif name == "model":
+                    self.model = self.parse_file(next_path, True)
+                    if "name" not in self.model:
+                        raise ValueError("Model file must specify a `name`")
                 else:
                     self.file_paths.append(next_path)
 
@@ -93,6 +106,16 @@ class Tree:
             return tree.macros[name]
         return None
 
+    def find_model(self):
+        tree = self
+        while tree.parent:
+            if tree.model:
+                return tree.model
+            tree = tree.parent
+        if tree.model:
+            return tree.model
+        raise Exception("No model could be found for file")
+
     def fix_expanded_stream(self, stream):
         result = []
         text = ""
@@ -110,7 +133,7 @@ class Tree:
         result.append(text)
         return result
 
-    def parse_file(self, path):
+    def parse_file(self, path, allow_expansion=True):
         stream = lex_file(path)
         if len(stream) == 0:
             raise ValueError("Lexer error, are you doing \
@@ -119,30 +142,36 @@ class Tree:
         ignore = []
         text = {}
 
-        for i in range(len(stream)):
-            if stream[i] == "{{":
-                if i + 1 >= len(stream):
-                    raise ValueError( \
-                        "Expected macro name after {{, file: {0}".format(path))
-                elif stream[i + 1] == "{{":
-                    raise ValueError( \
-                        "Can't have nested macros, file: {0}".format(path))
-                elif stream[i + 1] == "}}":
-                    raise ValueError( \
-                        "Macro name must be nonempty, file: {0}".format(path))
-                if i + 2 >= len(stream) or stream[i + 2] != "}}":
-                    raise ValueError( \
-                        "Expected closing }}, file: {0}".format(path))
-                value = self.expand_macro(stream[i + 1].strip())
-                if value:
-                    estream.append(value)
-                    ignore.append(i + 1)
-                else:
-                    raise ValueError( \
-                        "Macro name does not exist, file: {0}".format(path))
-            elif stream[i] != "}}" and i not in ignore:
-                estream.append(stream[i])
-        estream = self.fix_expanded_stream(estream)
+        if allow_expansion:
+            for i in range(len(stream)):
+                if stream[i] == "{{":
+                    if i + 1 >= len(stream):
+                        raise ValueError( \
+                            "Expected macro name after {{, \
+                            file: {0}".format(path))
+                    elif stream[i + 1] == "{{":
+                        raise ValueError( \
+                            "Can't have nested macros, file: {0}".format(path))
+                    elif stream[i + 1] == "}}":
+                        raise ValueError( \
+                            "Macro name must be nonempty, \
+                            file: {0}".format(path))
+                    if i + 2 >= len(stream) or stream[i + 2] != "}}":
+                        raise ValueError( \
+                            "Expected closing }}, file: {0}".format(path))
+                    value = self.expand_macro(stream[i + 1].strip())
+                    if value:
+                        estream.append(value)
+                        ignore.append(i + 1)
+                    else:
+                        raise ValueError( \
+                            "Macro name does not exist, \
+                            file: {0}".format(path))
+                elif stream[i] != "}}" and i not in ignore:
+                    estream.append(stream[i])
+            estream = self.fix_expanded_stream(estream)
+        else:
+            estream = stream
 
         for i in range(len(estream)):
             if estream[i] == "[[":
@@ -175,7 +204,8 @@ class Tree:
             f = self.parse_file(path)
             full_name, prefix_name = self.get_full_name()
             f["Filename"] = prefix_name + split_path(path)[-1]
-            f["Deckname"] = full_name
+            f["ffsDeckname"] = full_name
+            f["ffsModel"] = self.find_model()
             self.files.append(f)
         for child in self.children:
             f = child.parse()
