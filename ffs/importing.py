@@ -21,10 +21,10 @@ model_css = """\
 }
 """
 
-# TODO macros are broken again, take a look
-# TODO clean up empty child databases
 # TODO models from files?
 # TODO what does that conf statement before saving the collection do?
+# TODO set added and updated tags for easier previewing
+# TODO options file
 
 class DirectoryImporter(Importer):
 
@@ -32,9 +32,6 @@ class DirectoryImporter(Importer):
 
         tree = Tree(self.file[:-4])
         queue = tree.parse()
-        self.log.append(str(queue))
-        self.log.append("rip")
-        return
         deck_name = tree.name
 
         col = self.col
@@ -135,6 +132,13 @@ class DirectoryImporter(Importer):
             deck_name = nids_decks[card[1]]
             deck = col.decks.id(deck_name)
             col.decks.setDeck([card[0]], deck)
+
+        # Cleanup empty decks
+        children_decks = col.decks.children(deck)
+        for child in children_decks:
+            cids = col.decks.cids(child[1], True)
+            if len(cids) == 0:
+                col.decks.rem(child[1])
         #col.conf['nextPos'] = self.dst.db.scalar(
         #    "select max(due)+1 from cards where type = 0") or 0
         col.save()

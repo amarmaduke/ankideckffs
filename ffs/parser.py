@@ -84,13 +84,14 @@ class Tree:
         return full_name[:-2], prefix_name
 
     def expand_macro(self, name):
-        result = None
         tree = self
-        while tree.parent and not result:
+        while tree.parent:
             if name in tree.macros:
-                result = tree.macros[name]
+                return tree.macros[name]
             tree = tree.parent
-        return result
+        if name in tree.macros:
+            return tree.macros[name]
+        return None
 
     def fix_expanded_stream(self, stream):
         result = []
@@ -143,9 +144,6 @@ class Tree:
                 estream.append(stream[i])
         estream = self.fix_expanded_stream(estream)
 
-        if len(estream) > 5:
-            raise ValueError(str(stream) + "\n\n" + str(estream))
-
         for i in range(len(estream)):
             if estream[i] == "[[":
                 if i + 1 >= len(estream):
@@ -167,7 +165,7 @@ class Tree:
                         "Expected field value after key declaration, \
                         file: {0}".format(path))
                 text[estream[i + 1].strip()] = \
-                    unicode(estream[i + 3].strip(), "utf8")
+                    estream[i + 3].strip().encode("utf8")
         if not text:
             raise ValueError("Unexpected parser error, file: {0}".format(path))
         return text
