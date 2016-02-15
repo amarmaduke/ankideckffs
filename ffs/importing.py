@@ -4,13 +4,89 @@ from anki.lang import ngettext
 from parser import Tree
 
 
-# TODO what happens if a model is changed out from under a card?
+# TODO fieldCache and registerNotes are borked. Probably latex \? Not escaped?
 # TODO what does that conf statement before saving the collection do?
 # TODO set added and updated tags for easier previewing
 # TODO options file
-# TODO cleanup unused tags or models
 
 class DirectoryImporter(Importer):
+
+    def handle_models(self, notes, new = False):
+        col = self.col
+        for note in notes:
+            model = note["ffsModel"]
+            m = None
+            if new:
+                m = col.models.new(model["name"])
+            else:
+                m = col.models.byName(model["name"])
+                if not m:
+                    raise ValueError("Expected model to exist")
+            if "latexPre" in model:
+                m["latexPre"] = model["latexPre"]
+            if "latexPost" in model:
+                m["latexPost"] = model["latexPost"]
+            if "css" in model:
+                m["css"] = model["css"]
+
+            if "fields" in model:
+                fields = ["Filename"]
+                fields.extend(model["fields"].split())
+                field_map = col.models.fieldMap(m)
+                field_names = col.models.fieldNames(m)
+                for i in range(len(fields)):
+                    if i < len(field_names):
+                        name = field_names[i]
+                        field = field_map[name][1]
+                        col.models.renameField(m, field, fields[i])
+                    else:
+                        field = col.models.newField(fields[i])
+                        col.models.addField(m, field)
+                if len(fields) < len(field_names):
+                    for i in range(len(fields), len(field_names)):
+                        name = field_names[i]
+                        field = field_map[name][1]
+                        col.models.remField(m, field)
+
+            if "templates" in model:
+                ts = model["templates"].split()
+                for name in ts:
+                    found = False
+                    for template in m["tmpls"]:
+                        if template["name"] == name:
+                            found = True
+                            if name+" qfmt" in model:
+                                template["qfmt"] = model[name+" qfmt"]
+                            if name+" afmt" in model:
+                                template["afmt"] = model[name+" afmt"]
+                            if name+" bqfmt" in model:
+                                template["bqfmt"] = model[name+" bqfmt"]
+                            if name+" bafmt" in model:
+                                template["bafmt"] = model[name+" bafmt"]
+                    if not found:
+                        template = col.models.newTemplate(name)
+                        if name+" qfmt" in model:
+                            template["qfmt"] = model[name+" qfmt"]
+                        if name+" afmt" in model:
+                            template["afmt"] = model[name+" afmt"]
+                        if name+" bqfmt" in model:
+                            template["bqfmt"] = model[name+" bqfmt"]
+                        if name+" bafmt" in model:
+                            template["bafmt"] = model[name+" bafmt"]
+                        col.models.addTemplate(m, template)
+                col.genCards(col.findNotes("*"))
+                for template in m["tmpls"]:
+                    if template["name"] not in ts:
+                        col.models.remTemplate(m, template)
+
+            note["ffsModel"]["id"] = m["id"]
+            if new:
+                col.models.add(m)
+            # Sanity check our note
+            for field in col.models.fieldNames(m):
+                if field not in note:
+                    raise ValueError("Note missing model field, \
+                        in file: {0}".format(note["Filename"]))
 
     def run(self):
 
@@ -23,47 +99,31 @@ class DirectoryImporter(Importer):
         deck = col.decks.id(deck_name)
         col.decks.select(deck)
 
-        # Make models
+        # Make new models
+        new_models = []
+        old_models = []
+        old_model_ids = []
         for note in queue:
-            tmp = note["ffsModel"]
-            m = col.models.byName(tmp["name"])
-            if m is None:
-                m = col.models.new(tmp["name"])
-                self.log.append(str(tmp) + '\n')
-                if "latexPre" in tmp:
-                    m["latexPre"] = tmp["latexPre"]
-                if "latexPost" in tmp:
-                    m["latexPost"] = tmp["latexPost"]
-                if "css" in tmp:
-                    m["css"] = tmp["css"]
-                if "templates" in tmp:
-                    templates = tmp["templates"].split()
-                    for name in templates:
-                        t = col.models.newTemplate(name)
-                        if name+" qfmt" in tmp:
-                            t["qfmt"] = tmp[name+" qfmt"]
-                        if name+" afmt" in tmp:
-                            t["afmt"] = tmp[name+" afmt"]
-                        if name+" bqfmt" in tmp:
-                            t["bqfmt"] = tmp[name+" bqfmt"]
-                        if name+" bafmt" in tmp:
-                            t["bafmt"] = tmp[name+" bafmt"]
-                        col.models.addTemplate(m, t)
-                if "fields" in tmp:
-                    fields = tmp["fields"].split()
-                    for name in fields:
-                        field = col.models.newField(name)
-                        col.models.addField(m, field)
-                field = col.models.newField("Filename")
-                col.models.addField(m, field)
-                self.log.append(str(m) + '\n')
-                self.log.append("rip\n")
-                col.models.add(m)
-            # Sanity check our note
-            for field in col.models.fieldNames(m):
-                if field not in note:
-                    raise ValueError("Note missing model field, \
-                        in file: {0}".format(note["Filename"]))
+            m = col.models.byName(note["ffsModel"]["name"])
+            if not m:
+                unique = True
+                for n in new_models:
+                    if note["ffsModel"]["name"] == n["ffsModel"]["name"]:
+                        unique = False
+                        break
+                if unique:
+                    new_models.append(note)
+            else:
+                unique = True
+                for n in old_models:
+                    if note["ffsModel"]["name"] == n["ffsModel"]["name"]:
+                        unique = False
+                        break
+                if unique:
+                    old_models.append(note)
+                note["ffsModel"]["id"] = m["id"]
+        self.handle_models(new_models, True)
+
         # Check for updates
         nids = []
         nids_decks = {}
@@ -79,36 +139,42 @@ class DirectoryImporter(Importer):
             field_map = col.models.fieldMap(m)
             fields = splitFields(note[6])
             if "Filename" not in field_map:
-                if col.tags.inList("ankideckffs:deletable", tags):
+                if col.tags.inList("ffsi:owned", tags):
                     raise ValueError("ffs owned note tampered with.")
                 continue
             filename = fields[field_map["Filename"][0]]
 
             deck_check = filename.split('/')[0]
-            if col.tags.inList("ankideckffs:deletable", tags) \
+            if col.tags.inList("ffsi:owned", tags) \
                     and deck_name == deck_check:
                 deletable = True
             for n in queue:
                 om = col.models.byName(n["ffsModel"]["name"])
                 if n["Filename"] == filename:
-                    if m != om:
-                        raise ValueError("ffs owned note tampered with")
-                    changed = False
-                    for field in field_map:
-                        if fields[field[0]] != n[field]:
-                            changed = True
-                            break
-                    if changed:
-                        flds = []
-                        for field in field_map:
+                    flds = []
+                    if "fields" in n["ffsModel"]:
+                        flds.append(n["Filename"])
+                        for field in n["ffsModel"]["fields"].split():
+                            if field not in n:
+                                raise ValueError("Note missing model field," +
+                                    " in file: {0}".format(n["Filename"]))
                             flds.append(n[field])
-                        note[6] = joinFields(flds)
-                        update.append(note)
+                    else:
+                        for field in col.models.fieldNames(om):
+                            flds.append(n[field])
+                    if note[2] != om["id"]:
+                        old_model_ids.append(note[2])
+                        note[2] = int(om["id"])
+                    note[6] = joinFields(flds)
+                    update.append(note)
                     match = n
+
             if match:
                 queue.remove(match)
             elif deletable:
                 delete.append(note[0])
+
+        self.handle_models(old_models)
 
         for note in queue:
             add.append(note)
@@ -117,14 +183,14 @@ class DirectoryImporter(Importer):
         col.db.executemany(
             "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
             update)
-        col.updateFieldCache(update)
-        col.tags.registerNotes(update)
+        #col.updateFieldCache(update)
+        #col.tags.registerNotes(update)
 
         for textfile in add:
             m = col.models.byName(textfile["ffsModel"]["name"])
             col.models.setCurrent(m)
             note = col.newNote()
-            note.addTag("ankideckffs:deletable")
+            note.addTag("ffsi:owned")
             fields = col.models.fieldNames(m)
             for field in fields:
                 note[field] = textfile[field]
@@ -161,6 +227,21 @@ class DirectoryImporter(Importer):
             cids = col.decks.cids(child[1], True)
             if len(cids) == 0:
                 col.decks.rem(child[1])
+
+        # Cleanup models
+        for note in old_models:
+            m = col.models.byName(note["ffsModel"]["name"])
+            if m:
+                nids = col.models.nids(m)
+                if len(nids) == 0:
+                    col.models.rem(m)
+        for i in old_model_ids:
+            m = col.models.get(i)
+            if m:
+                nids = col.models.nids(m)
+                if len(nids) == 0:
+                    col.models.rem(m)
+
         #col.conf['nextPos'] = self.dst.db.scalar(
         #    "select max(due)+1 from cards where type = 0") or 0
         col.save()

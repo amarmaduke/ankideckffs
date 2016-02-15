@@ -1,5 +1,5 @@
 [[name]]
-MyOtherModel
+MyOther5Model
 
 [[css]]
 .card {
@@ -19,14 +19,14 @@ MyOtherModel
 }
 
 [[fields]]
-Front Back Source
+Front Back Source Bonus
 
 [[templates]]
-MyMemeplete
+MyTemplate5
 
-[[MyMemeplete qfmt]]
-\{{Front\}}
+[[MyTemplate5 qfmt]]
+\{{Front\}} THIS HAS CHANGED four TIMES WOW
 
-[[MyMemeplete afmt]]
+[[MyTemplate5 afmt]]
 \{{FrontSide\}} <hr id=answer> \{{Back\}} <p id='source'>\{{Source\}}</p>
 
