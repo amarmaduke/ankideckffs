@@ -3,7 +3,6 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
-# TODO what does that conf statement before saving the collection do?
 # TODO fix error message spacing
 # TODO options file
 
@@ -27,55 +26,65 @@ class DirectoryImporter(Importer):
             if "css" in model:
                 m["css"] = model["css"]
 
-            if "fields" in model:
-                fields = ["Filename"]
-                fields.extend(model["fields"].split())
-                field_map = col.models.fieldMap(m)
-                field_names = col.models.fieldNames(m)
-                for i in range(len(fields)):
-                    if i < len(field_names):
-                        name = field_names[i]
-                        field = field_map[name][1]
-                        col.models.renameField(m, field, fields[i])
-                    else:
-                        field = col.models.newField(fields[i])
-                        col.models.addField(m, field)
-                if len(fields) < len(field_names):
-                    for i in range(len(fields), len(field_names)):
-                        name = field_names[i]
-                        field = field_map[name][1]
-                        col.models.remField(m, field)
+            if "fields" not in model:
+                raise ValueError("Model file requires fields key")
+            fields = ["Filename"]
+            fields.extend(model["fields"].split())
+            field_map = col.models.fieldMap(m)
+            field_names = col.models.fieldNames(m)
+            for i in range(len(fields)):
+                if i < len(field_names):
+                    name = field_names[i]
+                    field = field_map[name][1]
+                    col.models.renameField(m, field, fields[i])
+                else:
+                    field = col.models.newField(fields[i])
+                    col.models.addField(m, field)
+            if len(fields) < len(field_names):
+                for i in range(len(fields), len(field_names)):
+                    name = field_names[i]
+                    field = field_map[name][1]
+                    col.models.remField(m, field)
 
-            if "templates" in model:
-                ts = model["templates"].split()
-                for name in ts:
-                    found = False
-                    for template in m["tmpls"]:
-                        if template["name"] == name:
-                            found = True
-                            if name+" qfmt" in model:
-                                template["qfmt"] = model[name+" qfmt"]
-                            if name+" afmt" in model:
-                                template["afmt"] = model[name+" afmt"]
-                            if name+" bqfmt" in model:
-                                template["bqfmt"] = model[name+" bqfmt"]
-                            if name+" bafmt" in model:
-                                template["bafmt"] = model[name+" bafmt"]
-                    if not found:
-                        template = col.models.newTemplate(name)
+            if "templates" not in model:
+                raise ValueError("Model file requires templates key")
+            ts = model["templates"].split()
+            for name in ts:
+                found = False
+                for template in m["tmpls"]:
+                    if template["name"] == name:
+                        found = True
                         if name+" qfmt" in model:
                             template["qfmt"] = model[name+" qfmt"]
+                        else:
+                            template["qfmt"] = "{{Front}}"
                         if name+" afmt" in model:
                             template["afmt"] = model[name+" afmt"]
+                        else:
+                            template["afmt"] = "{{Back}}"
                         if name+" bqfmt" in model:
                             template["bqfmt"] = model[name+" bqfmt"]
                         if name+" bafmt" in model:
                             template["bafmt"] = model[name+" bafmt"]
-                        col.models.addTemplate(m, template)
-                col.genCards(col.findNotes("*"))
-                for template in m["tmpls"]:
-                    if template["name"] not in ts:
-                        col.models.remTemplate(m, template)
+                if not found:
+                    template = col.models.newTemplate(name)
+                    if name+" qfmt" in model:
+                        template["qfmt"] = model[name+" qfmt"]
+                    else:
+                        template["qfmt"] = "{{Front}}"
+                    if name+" afmt" in model:
+                        template["afmt"] = model[name+" afmt"]
+                    else:
+                        template["afmt"] = "{{Back}}"
+                    if name+" bqfmt" in model:
+                        template["bqfmt"] = model[name+" bqfmt"]
+                    if name+" bafmt" in model:
+                        template["bafmt"] = model[name+" bafmt"]
+                    col.models.addTemplate(m, template)
+            col.genCards(col.findNotes("*"))
+            for template in m["tmpls"]:
+                if template["name"] not in ts:
+                    col.models.remTemplate(m, template)
 
             note["ffsModel"]["id"] = m["id"]
             if new:
@@ -202,6 +211,7 @@ class DirectoryImporter(Importer):
         col.db.executemany(
             "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
             update)
+        col.genCards(update_nids)
         col.updateFieldCache(update_nids)
         col.tags.registerNotes(update_nids)
 
@@ -218,6 +228,7 @@ class DirectoryImporter(Importer):
             nids.append(note.id)
             nids_decks[note.id] = textfile["ffsDeckname"]
             addedc = addedc + 1
+        col.genCards(nids)
 
         added_cards = []
         for card in col.db.execute("select * from cards"):
@@ -267,8 +278,8 @@ class DirectoryImporter(Importer):
                 if len(nids) == 0:
                     col.models.rem(m)
 
-        #col.conf['nextPos'] = self.dst.db.scalar(
-        #    "select max(due)+1 from cards where type = 0") or 0
+        col.conf['nextPos'] = col.db.scalar(
+            "select max(due)+1 from cards where type = 0") or 0
         col.save()
         col.db.execute("vacuum")
         col.db.execute("analyze")

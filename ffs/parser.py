@@ -91,7 +91,7 @@ class Tree:
         result.append(tree.name)
         for name in reversed(result):
             full_name = full_name + name + "::"
-        for name in reversed(result[:-1]):
+        for name in reversed(result):
             prefix_name = prefix_name + name + "/"
 
         return full_name[:-2], prefix_name

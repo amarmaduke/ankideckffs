@@ -27,7 +27,7 @@ The files can be have any extension you like.
 There are however three reserved files with strictly no extension: `model`, `macros`, and `options`.
 The `options` file is currently unused but it's still reserved.
 The `model` file is used to define a given model.
-Note another quirk that you must have a model inside the root directory, but this file can just be empty.
+Note another quirk that you must have a model inside the root directory, or at least a model file in the search path for every note.
 The `macros` file is used to define macro key-value pairs that can be used in any other note file to simplify copying around the same text.
 Every other file in the directory is treated as a note file.
 These three special files also nest in sub directories, so it's not just the root directory but any directory inside and including the root that can define these special files.
@@ -50,17 +50,17 @@ Note that key names are context sensitive, so `Front` is a different key than `f
 Models are defined by a `model` file.
 A note will check its immediate directory for a `model` file and then all of the parent directories afterwards.
 As soon as a `model` file is found it is used as the model for that note.
-The `model` file has no required keys but there are only a certain collection of keys it will look for and use.
+The `model` has only a certain collection of keys it will look for and use.
 Of those keys there are two special keys, `[[fields]]` and `[[templates]]`.
 
 Here is a list of all used keys:
 
 * name (required)
 * css
-* fields (\*)
+* fields (\*) (required)
 * latexPre
 * latexPost
-* templates (\*)
+* templates (\*) (required)
 * (template name) qfmt (\*\*)
 * (template name) afmt (\*\*)
 * (template name) bqfmt (\*\*)
