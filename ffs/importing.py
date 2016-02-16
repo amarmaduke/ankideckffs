@@ -3,7 +3,6 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
-# TODO set a "changed" tag for all notes whose field data changed
 # TODO Write documentation on github so people know how to use it
 # TODO fieldCache and registerNotes are borked. Probably latex \? Not escaped?
 # TODO what does that conf statement before saving the collection do?
