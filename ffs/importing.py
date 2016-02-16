@@ -131,6 +131,9 @@ class DirectoryImporter(Importer):
         update = []
         add = []
         delete = []
+        addedc = 0
+        changedc = 0
+        deletedc = 0
         for note in col.db.execute("select * from notes"):
             note = list(note)
             match = None
@@ -153,6 +156,7 @@ class DirectoryImporter(Importer):
                 om = col.models.byName(n["ffsModel"]["name"])
                 if n["Filename"] == filename:
                     flds = []
+                    changed = False
                     if "fields" in n["ffsModel"]:
                         flds.append(n["Filename"])
                         for field in n["ffsModel"]["fields"].split():
@@ -163,17 +167,32 @@ class DirectoryImporter(Importer):
                     else:
                         for field in col.models.fieldNames(om):
                             flds.append(n[field])
-                    if note[2] != om["id"]:
+                    if int(note[2]) != int(om["id"]):
+                        changed = True
+                        self.log.append(str(note[2]) + " " + str(om["id"]))
                         old_model_ids.append(note[2])
                         note[2] = int(om["id"])
-                    note[6] = joinFields(flds)
+                    if note[6] != joinFields(flds):
+                        self.log.append(str(note[6]) + " " + str(joinFields(flds)))
+                        self.log.append("-----------")
+                        changed = True
+                        note[6] = joinFields(flds)
+                    if changed:
+                        new_tags = col.tags.remFromStr("ffsi:added", note[5])
+                        new_tags = col.tags.addToStr("ffsi:changed", new_tags)
+                        note[5] = new_tags
+                        changedc = changedc + 1
+                    else:
+                        new_tags = col.tags.remFromStr("ffsi:added", note[5])
+                        new_tags = col.tags.remFromStr("ffsi:changed", new_tags)
+                        note[5] = new_tags
                     update.append(note)
                     match = n
-
             if match:
                 queue.remove(match)
             elif deletable:
                 delete.append(note[0])
+                deletedc = deletedc + 1
 
         self.handle_models(old_models)
 
@@ -184,7 +203,7 @@ class DirectoryImporter(Importer):
         col.db.executemany(
             "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
             update)
-        #col.updateFieldCache(update)
+        col.updateFieldCache(update)
         #col.tags.registerNotes(update)
 
         for textfile in add:
@@ -192,25 +211,28 @@ class DirectoryImporter(Importer):
             col.models.setCurrent(m)
             note = col.newNote()
             note.addTag("ffsi:owned")
+            note.addTag("ffsi:added")
             fields = col.models.fieldNames(m)
             for field in fields:
                 note[field] = textfile[field]
             col.addNote(note)
             nids.append(note.id)
             nids_decks[note.id] = textfile["ffsDeckname"]
+            addedc = addedc + 1
 
         added_cards = []
         for card in col.db.execute("select * from cards"):
             card = list(card)
             if card[1] in nids:
                 added_cards.append(card)
-        cc = len(added_cards) + len(update)
-        cd = len(delete)
+        totalc = addedc + changedc + deletedc
         self.log.append(
             ngettext(
-                "{0} card changed and {1} deleted.",
-                "{0} cards changed and {1} deleted.",
-                cc).format(cc, cd))
+                "{0} card changed, " +
+                "({1}, {2}, {3}) note (added, changed, or deleted).",
+                "{0} cards changed. " +
+                "({1}, {2}, {3}) notes (added, changed, or deleted).",
+                totalc).format(len(added_cards), addedc, changedc, deletedc))
         # TODO improve this loop
         for card in added_cards:
             deck_name = nids_decks[card[1]]
@@ -221,6 +243,9 @@ class DirectoryImporter(Importer):
         basic = col.models.byName("Basic")
         if basic:
             col.models.setCurrent(basic)
+
+        # Register all of our internal tags
+        col.tags.register(["ffsi:owned", "ffsi:added", "ffsi:changed"])
 
         # Cleanup empty decks
         children_decks = col.decks.children(deck)
