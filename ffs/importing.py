@@ -3,8 +3,6 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
-# TODO Write documentation on github so people know how to use it
-# TODO fieldCache and registerNotes are borked. Probably latex \? Not escaped?
 # TODO what does that conf statement before saving the collection do?
 # TODO fix error message spacing
 # TODO options file
@@ -128,6 +126,7 @@ class DirectoryImporter(Importer):
         nids = []
         nids_decks = {}
         update = []
+        update_nids = []
         add = []
         delete = []
         addedc = 0
@@ -186,6 +185,7 @@ class DirectoryImporter(Importer):
                         new_tags = col.tags.remFromStr("ffsi:changed", new_tags)
                         note[5] = new_tags
                     update.append(note)
+                    update_nids.append(note[0])
                     match = n
             if match:
                 queue.remove(match)
@@ -202,8 +202,8 @@ class DirectoryImporter(Importer):
         col.db.executemany(
             "insert or replace into notes values (?,?,?,?,?,?,?,?,?,?,?)",
             update)
-        col.updateFieldCache(update)
-        #col.tags.registerNotes(update)
+        col.updateFieldCache(update_nids)
+        col.tags.registerNotes(update_nids)
 
         for textfile in add:
             m = col.models.byName(textfile["ffsModel"]["name"])
