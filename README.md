@@ -16,7 +16,8 @@ Combined with some flashy bells and whistles, it sounds promising, no?
 
 ## Importing
 
-This plugin must be installed through the same channels as all other anki plugins. (TODO: Get the number place it here)
+This plugin must be installed through the same channels as all other anki plugins.
+The number code to do so is: `2023799609`.
 Once installed, you'll have an additional import option which you can use to point at a directory.
 One quirk to note is that you have to import a _file_ through the standard Anki setup.
 To get around this you have to have a file named "(directory name).dir".
