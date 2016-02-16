@@ -176,12 +176,9 @@ class DirectoryImporter(Importer):
                             flds.append(n[field])
                     if int(note[2]) != int(om["id"]):
                         changed = True
-                        self.log.append(str(note[2]) + " " + str(om["id"]))
                         old_model_ids.append(note[2])
                         note[2] = int(om["id"])
                     if note[6] != joinFields(flds):
-                        self.log.append(str(note[6]) + " " + str(joinFields(flds)))
-                        self.log.append("-----------")
                         changed = True
                         note[6] = joinFields(flds)
                     if changed:
