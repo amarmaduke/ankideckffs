@@ -138,6 +138,7 @@ class DirectoryImporter(Importer):
         update_nids = []
         add = []
         delete = []
+        tags_to_register = ["ffsi:added", "ffsi:changed", "ffsi:owned"]
         addedc = 0
         changedc = 0
         deletedc = 0
@@ -181,15 +182,19 @@ class DirectoryImporter(Importer):
                     if note[6] != joinFields(flds):
                         changed = True
                         note[6] = joinFields(flds)
+                    if n["tags"]:
+                        new_tags = n["tags"].split()
+                        tags_to_register.extend(new_tags)
+                        new_tags = col.tags.join(new_tags + ["ffsi:owned"])
+                    else:
+                        new_tags = note[5]
                     if changed:
-                        new_tags = col.tags.remFromStr("ffsi:added", note[5])
                         new_tags = col.tags.addToStr("ffsi:changed", new_tags)
-                        note[5] = new_tags
                         changedc = changedc + 1
                     else:
-                        new_tags = col.tags.remFromStr("ffsi:added", note[5])
                         new_tags = col.tags.remFromStr("ffsi:changed", new_tags)
-                        note[5] = new_tags
+                    new_tags = col.tags.remFromStr("ffsi:added", new_tags)
+                    note[5] = new_tags
                     update.append(note)
                     update_nids.append(note[0])
                     match = n
@@ -216,8 +221,14 @@ class DirectoryImporter(Importer):
             m = col.models.byName(textfile["ffsModel"]["name"])
             col.models.setCurrent(m)
             note = col.newNote()
-            note.addTag("ffsi:owned")
-            note.addTag("ffsi:added")
+
+            new_tags = ["ffsi:owned", "ffsi:added"]
+            if textfile["tags"]:
+                custom_tags = textfile["tags"].split()
+                new_tags.extend(custom_tags)
+                tags_to_register.extend(custom_tags)
+            [note.addTag(tag) for tag in list(set(new_tags))]
+
             fields = col.models.fieldNames(m)
             for field in fields:
                 note[field] = textfile[field]
@@ -251,8 +262,8 @@ class DirectoryImporter(Importer):
         if basic:
             col.models.setCurrent(basic)
 
-        # Register all of our internal tags
-        col.tags.register(["ffsi:owned", "ffsi:added", "ffsi:changed"])
+        # Register all of our tags
+        col.tags.register(list(set(tags_to_register)))
 
         # Cleanup empty decks
         children_decks = col.decks.children(deck)
