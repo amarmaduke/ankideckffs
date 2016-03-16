@@ -182,7 +182,7 @@ class DirectoryImporter(Importer):
                     if note[6] != joinFields(flds):
                         changed = True
                         note[6] = joinFields(flds)
-                    if n["tags"]:
+                    if "tags" in n:
                         new_tags = n["tags"].split()
                         tags_to_register.extend(new_tags)
                         new_tags = col.tags.join(new_tags + ["ffsi:owned"])
@@ -223,7 +223,7 @@ class DirectoryImporter(Importer):
             note = col.newNote()
 
             new_tags = ["ffsi:owned", "ffsi:added"]
-            if textfile["tags"]:
+            if "tags" in textfile:
                 custom_tags = textfile["tags"].split()
                 new_tags.extend(custom_tags)
                 tags_to_register.extend(custom_tags)
