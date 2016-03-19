@@ -3,6 +3,8 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
+from aqt.utils import showInfo
+
 # TODO fix error message spacing
 # TODO options file
 
@@ -185,18 +187,20 @@ class DirectoryImporter(Importer):
                         self.log.append("-----------")
                         changed = True
                         note[6] = joinFields(flds)
+
+                    new_tags = col.tags.addToStr("ffsi:owned", "")
+                    note[5] = col.tags.remFromStr("ffsi:added", note[5])
+                    note[5] = col.tags.remFromStr("ffsi:changed", note[5])
                     if "tags" in n:
-                        new_tags = n["tags"].split()
-                        tags_to_register.extend(new_tags)
-                        new_tags = col.tags.join(new_tags + ["ffsi:owned"])
-                    else:
-                        new_tags = note[5]
+                        for t in n["tags"].split():
+                            new_tags = col.tags.addToStr(t, new_tags)
+                        tags_to_register.extend(col.tags.split(new_tags))
+                    if note[5] != new_tags:
+                        changed = True
+
                     if changed:
                         new_tags = col.tags.addToStr("ffsi:changed", new_tags)
                         changedc = changedc + 1
-                    else:
-                        new_tags = col.tags.remFromStr("ffsi:changed", new_tags)
-                    new_tags = col.tags.remFromStr("ffsi:added", new_tags)
                     note[5] = new_tags
                     update.append(note)
                     update_nids.append(note[0])
@@ -294,3 +298,4 @@ class DirectoryImporter(Importer):
         col.save()
         col.db.execute("vacuum")
         col.db.execute("analyze")
+        col.fixIntegrity()
