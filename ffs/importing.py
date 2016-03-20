@@ -3,8 +3,6 @@ from anki.utils import splitFields, joinFields
 from anki.lang import ngettext
 from parser import Tree
 
-from aqt.utils import showInfo
-
 # TODO fix error message spacing
 # TODO options file
 
@@ -195,6 +193,8 @@ class DirectoryImporter(Importer):
                         for t in n["tags"].split():
                             new_tags = col.tags.addToStr(t, new_tags)
                         tags_to_register.extend(col.tags.split(new_tags))
+                    else:
+                        new_tags = note[5]
                     if note[5] != new_tags:
                         changed = True
 
