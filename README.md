@@ -36,12 +36,12 @@ These three special files also nest in sub directories, so it's not just the roo
 ### File Syntax
 
 All files follow the same basic syntax: `[[key]] value ... [[otherkey]] value`.
-Whitespace is not significant between keys and the first non-whitespace character between a key and a value.
+Whitespace is not significant between keys and the first non-whitespace character of a value.
 You can think of this as building a dictionary of keys and values, where the value is all the text you wrote after the key, including whitespace, but then trimmed at the front and end of any excess whitespace.
 The strings `[[`, `]]`, `{{`, `}}` are reserved and must be escaped in order to use the literal values, e.g. `\{{`.
 You don't escape individual characters of the string, but the string in total.
 The double brackets are used for macro expansion.
-Assuming you have a macro appropriate defined, then `[[key]] {{macroname}}` will replace `{{macroname}}` with whatever the value for that macro key is.
+Assuming you have a macro appropriately defined, then `[[key]] {{macroname}}` will replace `{{macroname}}` with whatever the value for that macro key is.
 
 This syntax is used for all files, including the special files `model`, `macros`, and `options`.
 Note that key names are context sensitive, so `Front` is a different key than `front`.
@@ -100,6 +100,11 @@ You can not, and should not define this field in your notes.
 This field is forced upon any model you define and is used to determine if two notes are the same.
 The field holds not just the filename but the relative path from the root directory to its location.
 
+Finally, there is a special field `tags`.
+You are allowed to define this field in your model if you choose, but it assumes the same syntax as a `model` files fields.
+That is, space separated words.
+Each word in the value of the key `[[tags]]` will be added as a tag to the note.
+
 ## After Importing
 
 Once you've imported your collection of notes into Anki it is advised that you don't make any changes to the notes inside Anki itself.
@@ -107,7 +112,7 @@ Obviously, the entire point of this plugin is for you to make those changes on t
 
 However, every imported card has an `ffsi:owned` tag.
 If you wish to take a given note for yourself yet still use the importer for other notes, then remove this tag.
-The importer can still find the card and note if it remains in the deck, but will never delete notes that it does not claim to own.
+The importer can still find the card and note if it remains in the deck (and thus potentially change it), but it will never delete notes that it does not claim to own.
 There are two other tags that will be of use as well: `ffsi:added` and `ffsi:changed`.
 These tags are set at import-time to brand new notes or notes were either the model or the field data has changed.
 These offer a quick way to preview all of the changes you've made and correct mistakes.
