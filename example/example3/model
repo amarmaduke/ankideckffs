@@ -1,5 +1,5 @@
 [[name]]
-MyOther6Model
+MyOther7Model
 
 [[css]]
 .card {
@@ -19,7 +19,7 @@ MyOther6Model
 }
 
 [[fields]]
-Front Back Source Bonus
+Front Back Source Bonus3
 
 [[templates]]
 MyTemplate5

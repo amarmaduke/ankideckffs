@@ -67,7 +67,7 @@ Here is a list of all used keys:
 * (template name) bqfmt (\*\*)
 * (template name) bafmt (\*\*)
 
-(\*) This fields are parsed in a special way.
+(\*) This key is parsed in a special way.
 The value is taken as usual, but then the value is split on whitespace, all "words" are then used as a desired field or template name
 
 (\*\*) If a template name is defined in the templates key, then the importer will also look for keys that used that templates name, space, and the literals mentioned above.
@@ -82,7 +82,7 @@ Consider if you have a definition you'd like to memorize, but the definitions ar
 In order disambiguate it would be nice to know the source for context, but that lends to retyping the exact same string over and over, so why not simplify with a macro?
 
 Macro files syntax is the exact same as every other file, the only difference is that keys are now "macro keys" with values being the expanded form of the macro.
-If you then use a macro in another file, e.g. `{{macro name}}` then the macro will be expanded to associated value.
+If you then use a macro in another file, e.g. `{{macro name}}` then the macro will be expanded to the associated value.
 Searching for macros is done in the same way that models are found.
 First we look inside the present directory, then we move up to the parent, and so on, until we hit the root.
 If no macro name exists in the hierarchy we error.
@@ -93,15 +93,14 @@ We take the first such macro name available to us.
 Notes are any other file (I prefer the extensions \*.note or \*.txt) that conforms to the file syntax above.
 However, because a note must have a model, it is expected that there is an associated key for every field defined in the associated model.
 If this is not true then the importer will error.
-This is in contrast to supplying default values for missing fields, the reason error was chosen over defaults is mostly low friction.
 
 Another detail is that the key `Filename` is reserved.
 You can not, and should not define this field in your notes.
 This field is forced upon any model you define and is used to determine if two notes are the same.
-The field holds not just the filename but the relative path from the root directory to its location.
+The field holds not just the filename but the relative path from the root directory to the notes location.
 
 Finally, there is a special field `tags`.
-You are allowed to define this field in your model if you choose, but it assumes the same syntax as a `model` files fields.
+You are allowed to define this field in your notes if you choose, but it assumes the same syntax as a `model` files fields.
 That is, space separated words.
 Each word in the value of the key `[[tags]]` will be added as a tag to the note.
 
@@ -112,7 +111,7 @@ Obviously, the entire point of this plugin is for you to make those changes on t
 
 However, every imported card has an `ffsi:owned` tag.
 If you wish to take a given note for yourself yet still use the importer for other notes, then remove this tag.
-The importer can still find the card and note if it remains in the deck (and thus potentially change it), but it will never delete notes that it does not claim to own.
+The importer can still find the card and see if it remains in the deck (and thus potentially change it), but it will never delete notes that it does not claim to own.
 There are two other tags that will be of use as well: `ffsi:added` and `ffsi:changed`.
 These tags are set at import-time to brand new notes or notes were either the model or the field data has changed.
 These offer a quick way to preview all of the changes you've made and correct mistakes.

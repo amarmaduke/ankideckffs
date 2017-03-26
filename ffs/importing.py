@@ -36,7 +36,8 @@ class DirectoryImporter(Importer):
                 if i < len(field_names):
                     name = field_names[i]
                     field = field_map[name][1]
-                    col.models.renameField(m, field, fields[i])
+                    if name != fields[i]:
+                        col.models.renameField(m, field, fields[i])
                 else:
                     field = col.models.newField(fields[i])
                     col.models.addField(m, field)
